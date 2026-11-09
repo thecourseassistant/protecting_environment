@@ -3,6 +3,26 @@ import { ClawState, FloatingItem, RubbishType } from '../types';
 import { TRASH_ITEMS, TRASH_ITEMS_MAP } from '../data/gameData';
 import { soundEffects } from '../services/soundEffects';
 
+// Polyfill roundRect for older mobile browsers / WebViews
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    radii?: number | DOMPointInit | (number | DOMPointInit)[]
+  ) {
+    const r = typeof radii === 'number' ? radii : Array.isArray(radii) && typeof radii[0] === 'number' ? radii[0] : 0;
+    this.moveTo(x + r, y);
+    this.arcTo(x + w, y, x + w, y + h, r);
+    this.arcTo(x + w, y + h, x, y + h, r);
+    this.arcTo(x, y + h, x, y, r);
+    this.arcTo(x, y, x + w, y, r);
+    this.closePath();
+    return this;
+  };
+}
+
 interface OceanCanvasProps {
   currentCategory: RubbishType;
   onItemCollected: (itemId: string, isCorrect: boolean) => void;
@@ -380,53 +400,10 @@ export const OceanCanvas: React.FC<OceanCanvasProps> = ({
                 }
               }
 
-              // Remove grabbed item and respawn
+              // Remove grabbed item and do not refill
               const removedUid = claw.grabbedItemUid;
               itemsRef.current = itemsRef.current.filter((it) => it.uid !== removedUid);
               claw.grabbedItemUid = null;
-
-              // Respawn replacement item without duplicating any item currently present
-              setTimeout(() => {
-                const activeIds = new Set(itemsRef.current.map((it) => it.defId));
-                // Only candidate items not currently in the water
-                const unpickedDefs = TRASH_ITEMS.filter((def) => !activeIds.has(def.id));
-
-                if (unpickedDefs.length > 0 && itemsRef.current.length < 8) {
-                  // If no matching items remain in the water, prioritize spawning one
-                  const matchingUnpicked = unpickedDefs.filter((d) =>
-                    d.categories.includes(currentCategoryRef.current)
-                  );
-                  const hasMatchingInWater = itemsRef.current.some((it) => {
-                    const d = TRASH_ITEMS_MAP.get(it.defId);
-                    return d && d.categories.includes(currentCategoryRef.current);
-                  });
-
-                  const newDef =
-                    !hasMatchingInWater && matchingUnpicked.length > 0
-                      ? matchingUnpicked[Math.floor(Math.random() * matchingUnpicked.length)]
-                      : unpickedDefs[Math.floor(Math.random() * unpickedDefs.length)];
-
-                  const rx = 80 + Math.random() * (width - 160);
-                  const ry = Math.max(90, height * 0.28 + Math.random() * (height * 0.5));
-                  const speed = 18 + Math.random() * 16;
-                  const direction = Math.random() > 0.5 ? 1 : -1;
-
-                  itemsRef.current.push({
-                    uid: uidCounter.current++,
-                    defId: newDef.id,
-                    x: rx,
-                    y: ry,
-                    baseY: ry,
-                    vx: speed * direction,
-                    radius: 28,
-                    bobPhase: Math.random() * Math.PI * 2,
-                    bobSpeed: 1.2 + Math.random() * 0.8,
-                    rotation: (Math.random() - 0.5) * 0.25,
-                    isGrabbed: false,
-                    scale: 1,
-                  });
-                }
-              }, 400);
             }
           }
         }

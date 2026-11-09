@@ -29,6 +29,7 @@ export default function App() {
   const [hookState, setHookState] = useState<HookState>('SWINGING');
   const [feedbackEvent, setFeedbackEvent] = useState<FeedbackEvent | null>(null);
   const [sfxEnabled, setSfxEnabled] = useState<boolean>(true);
+  const [resetCount, setResetCount] = useState<number>(0);
 
   const currentCategoryKey = RUBBISH_TYPE_LIST[categoryIndex % RUBBISH_TYPE_LIST.length];
   const currentCategory = RUBBISH_CATEGORIES[currentCategoryKey];
@@ -139,6 +140,7 @@ export default function App() {
     setCollectedInCat(new Set());
     setIsGameComplete(false);
     setFeedbackEvent(null);
+    setResetCount((prev) => prev + 1);
   }, []);
 
   return (
@@ -176,6 +178,7 @@ export default function App() {
       {/* Lower Half: Underwater Ocean Canvas (fills the lower 50% of the screen) */}
       <div className="relative w-full h-1/2 overflow-hidden z-10">
         <OceanCanvas
+          key={resetCount}
           currentCategory={currentCategoryKey}
           onItemCollected={handleItemCollected}
           onClawStateChange={setHookState}
