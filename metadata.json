@@ -1,0 +1,6 @@
+{
+  "name": "Doraemon Ocean Cleanup - English Rubbish Sorter",
+  "description": "An interactive ocean-themed gold miner game where Doraemon and Nobita help English students practice vocabulary by collecting specific types of rubbish.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
