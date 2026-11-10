@@ -8,13 +8,19 @@ export const SurfaceScene: React.FC = () => {
   // Cut out ONLY the exterior white background using edge flood-fill
   // so Doraemon's white face/belly/eyes and Nobita's eyes/collar/socks remain 100% solid.
   useEffect(() => {
+    let objectUrl: string | null = null;
+    let isCancelled = false;
+
     const img = new Image();
     img.src = boatSpriteImage;
     img.onload = () => {
+      if (isCancelled) return;
       try {
         const canvas = document.createElement('canvas');
         const w = img.naturalWidth;
         const h = img.naturalHeight;
+        if (!w || !h) return;
+
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
@@ -29,7 +35,6 @@ export const SurfaceScene: React.FC = () => {
           const r = data[p];
           const g = data[p + 1];
           const b = data[p + 2];
-          // High brightness and low saturation (neutral white/light-gray background)
           const max = Math.max(r, g, b);
           const min = Math.min(r, g, b);
           return min > 215 && max - min < 25;
@@ -63,7 +68,7 @@ export const SurfaceScene: React.FC = () => {
         // BFS flood-fill through connected exterior white pixels
         while (head < tail) {
           const idx = queue[head++];
-          data[idx * 4 + 3] = 0; // Make exterior background pixel transparent
+          data[idx * 4 + 3] = 0;
 
           const x = idx % w;
           const y = (idx - x) / w;
@@ -74,7 +79,7 @@ export const SurfaceScene: React.FC = () => {
           if (y < h - 1) enqueueIfWhite(x, y + 1);
         }
 
-        // Soften 1px fringe bordering the transparent background to avoid white halos
+        // Soften 1px fringe bordering the transparent background
         for (let y = 1; y < h - 1; y++) {
           for (let x = 1; x < w - 1; x++) {
             const idx = y * w + x;
@@ -95,9 +100,30 @@ export const SurfaceScene: React.FC = () => {
         }
 
         ctx.putImageData(imgData, 0, 0);
-        setTransparentBoatUrl(canvas.toDataURL('image/png'));
+
+        if (canvas.toBlob) {
+          canvas.toBlob((blob) => {
+            if (isCancelled || !blob) return;
+            objectUrl = URL.createObjectURL(blob);
+            setTransparentBoatUrl(objectUrl);
+          }, 'image/png');
+        } else {
+          setTransparentBoatUrl(canvas.toDataURL('image/png'));
+        }
       } catch {
-        // Fallback if canvas security policies restrict
+        setTransparentBoatUrl(boatSpriteImage);
+      }
+    };
+    img.onerror = () => {
+      if (!isCancelled) {
+        setTransparentBoatUrl(boatSpriteImage);
+      }
+    };
+
+    return () => {
+      isCancelled = true;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
       }
     };
   }, []);
