@@ -5,47 +5,106 @@ import boatSpriteImage from '../assets/images/doraemon_nobita_boat_sprite_179423
 export const SurfaceScene: React.FC = () => {
   const [transparentBoatUrl, setTransparentBoatUrl] = useState<string | null>(null);
 
-  // Cut out Doraemon, Nobita, and the boat by keying out the solid white background
+  // Cut out ONLY the exterior white background using edge flood-fill
+  // so Doraemon's white face/belly/eyes and Nobita's eyes/collar/socks remain 100% solid.
   useEffect(() => {
     const img = new Image();
     img.src = boatSpriteImage;
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         ctx.drawImage(img, 0, 0);
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const imgData = ctx.getImageData(0, 0, w, h);
         const data = imgData.data;
 
-        // Chroma key: convert pure white / near-white background to transparent
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          // If pixel is white / light background
-          if (r > 235 && g > 235 && b > 235) {
-            data[i + 3] = 0; // alpha = 0
+        const isNearWhite = (idx: number) => {
+          const p = idx * 4;
+          const r = data[p];
+          const g = data[p + 1];
+          const b = data[p + 2];
+          // High brightness and low saturation (neutral white/light-gray background)
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          return min > 215 && max - min < 25;
+        };
+
+        const visited = new Uint8Array(w * h);
+        const queue = new Int32Array(w * h);
+        let head = 0;
+        let tail = 0;
+
+        const enqueueIfWhite = (x: number, y: number) => {
+          if (x < 0 || x >= w || y < 0 || y >= h) return;
+          const idx = y * w + x;
+          if (visited[idx]) return;
+          if (isNearWhite(idx)) {
+            visited[idx] = 1;
+            queue[tail++] = idx;
+          }
+        };
+
+        // Seed flood-fill from all 4 outer edges of the image
+        for (let x = 0; x < w; x++) {
+          enqueueIfWhite(x, 0);
+          enqueueIfWhite(x, h - 1);
+        }
+        for (let y = 0; y < h; y++) {
+          enqueueIfWhite(0, y);
+          enqueueIfWhite(w - 1, y);
+        }
+
+        // BFS flood-fill through connected exterior white pixels
+        while (head < tail) {
+          const idx = queue[head++];
+          data[idx * 4 + 3] = 0; // Make exterior background pixel transparent
+
+          const x = idx % w;
+          const y = (idx - x) / w;
+
+          if (x > 0) enqueueIfWhite(x - 1, y);
+          if (x < w - 1) enqueueIfWhite(x + 1, y);
+          if (y > 0) enqueueIfWhite(x, y - 1);
+          if (y < h - 1) enqueueIfWhite(x, y + 1);
+        }
+
+        // Soften 1px fringe bordering the transparent background to avoid white halos
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = y * w + x;
+            if (visited[idx]) continue;
+            const touchesBg =
+              visited[idx - 1] ||
+              visited[idx + 1] ||
+              visited[idx - w] ||
+              visited[idx + w];
+            if (touchesBg) {
+              const p = idx * 4;
+              const min = Math.min(data[p], data[p + 1], data[p + 2]);
+              if (min > 180) {
+                data[p + 3] = Math.round(data[p + 3] * 0.45);
+              }
+            }
           }
         }
 
         ctx.putImageData(imgData, 0, 0);
         setTransparentBoatUrl(canvas.toDataURL('image/png'));
       } catch {
-        // Fallback to original image if canvas security policies restrict
+        // Fallback if canvas security policies restrict
       }
     };
   }, []);
 
   return (
     <div className="relative w-full h-full bg-[#38bdf8] overflow-hidden select-none flex items-end justify-center">
-      {/* 
-        Enlarged panoramic background fitting the entire upper half edge-to-edge:
-        Clear blue sky, radiant shining sun, fluffy white clouds, tropical islands, and calm sea.
-      */}
+      {/* Enlarged panoramic background fitting the entire upper half edge-to-edge */}
       <img
         src={bgImage}
         alt="Enlarged ocean background with sun, sky, clouds, and islands"
@@ -53,17 +112,16 @@ export const SurfaceScene: React.FC = () => {
         referrerPolicy="no-referrer"
       />
 
-      {/* 
-        Clean cutout of Doraemon, Nobita, and the boat:
-        Scaled down to sit naturally in full on the water without covering the sky or islands.
-      */}
+      {/* Clean cutout of Doraemon, Nobita, and the boat */}
       <div className="relative z-10 flex items-end justify-center h-full pb-1 sm:pb-2 pointer-events-none">
-        <img
-          src={transparentBoatUrl || boatSpriteImage}
-          alt="Doraemon and Nobita in their boat"
-          className="h-[68%] sm:h-[72%] max-h-full w-auto max-w-[62vw] mx-auto object-contain object-bottom drop-shadow-xl"
-          referrerPolicy="no-referrer"
-        />
+        {transparentBoatUrl && (
+          <img
+            src={transparentBoatUrl}
+            alt="Doraemon and Nobita in their boat"
+            className="h-[68%] sm:h-[72%] max-h-full w-auto max-w-[62vw] mx-auto object-contain object-bottom drop-shadow-xl"
+            referrerPolicy="no-referrer"
+          />
+        )}
       </div>
 
       {/* Surface Waterline wave shimmer at the bottom boundary */}
